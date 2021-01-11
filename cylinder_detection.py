@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import seaborn as sns
 import time
+from mpl_toolkits.mplot3d import Axes3D
 
 sns.set()
 
@@ -23,6 +24,9 @@ class CylinderDetectior():
         self.points = np.delete(points, obj=1, axis=1)
         normals = np.array(pcd_part.normals)
         self.normals = np.delete(normals, obj=1, axis=1)
+        norms = np.tile(np.linalg.norm(self.normals, axis=1), (2, 1))
+        norms = norms.transpose((1, 0))
+        self.normals /= norms
 
     def intersection(self, points1, points2, normals1, normals2):
         A = np.stack([normals1, -normals2])
@@ -73,45 +77,64 @@ class CylinderDetectior():
         count_body = np.count_nonzero(d < radiuses_tile - diff, axis=1)
         return count_edge, count_body
 
-    def calc_circle(self, num=3):
-        idx1 = np.random.choice(len(self.points), size=num)
-        idx2 = np.random.choice(len(self.points), size=num)
-        centers = self.intersection(
-            self.points[idx1],
-            self.points[idx2],
-            self.normals[idx1],
-            self.normals[idx2])
+    def get_centers(self, r_max=0.3):
+        r = np.arange(-r_max, r_max, 0.01)
+        # normals = np.dot(self.normals, r)
+        # print(normals.shape)
+        # centers1 = self.points + self.normals
+        # centers2 = self.points - self.normals
+        centers = []
+        for i in r:
+            new_centers = self.points + i * self.normals
+            centers.append(new_centers)
+        centers = np.array(centers).reshape(-1, 2)
+        return centers
 
-        r1 = self.distance(centers, self.points[idx1])
-        r2 = self.distance(centers, self.points[idx2])
-        radiuses = (r1 + r2) / 2
+    def calc_circle(self, num):
+        # idx1 = np.random.choice(len(self.points), size=num)
+        # idx2 = np.random.choice(len(self.points), size=num)
+        # idx1 = list(range(len(self.points))) * len(self.points)
+        # idx2 = np.repeat(range(len(self.points)), len(self.points))
+        # print(idx1)
+        # print(idx2)
+        # centers = self.intersection(
+        #     self.points[idx1],
+        #     self.points[idx2],
+        #     self.normals[idx1],
+        #     self.normals[idx2])
+        centers = self.get_centers()
 
-        ans_idx = (radiuses < 0.5) & (np.abs(r1 - r2) < 0.5)
-        centers, radiuses = centers[ans_idx], radiuses[ans_idx]
+        # r1 = self.distance(centers, self.points[idx1])
+        # r2 = self.distance(centers, self.points[idx2])
+        # radiuses = (r1 + r2) / 2
 
-        count_edge, count_body = self.count_circle_point_num(centers, radiuses)
-        ans_idx = (count_edge > 40) & (count_body < 20)
-        return centers[ans_idx], radiuses[ans_idx]
+        # ans_idx = (radiuses < 0.5) & (np.abs(r1 - r2) < 0.5)
+        # print(ans_idx)
+        # centers, radiuses = centers[ans_idx], radiuses[ans_idx]
 
-    def plot_result(self, ax, centers, radiuses):
+        # count_edge, count_body = self.count_circle_point_num(centers, radiuses)
+        # ans_idx = (count_edge > 40) & (count_body < 20)
+        # return centers[ans_idx], radiuses[ans_idx]
+        return centers, np.zeros_like(centers)
+
+    def plot_result(self, ax, centers, radiuses, circle=False):
         ax.scatter(self.points[:, 0], self.points[:, 1],
                    alpha=0.2, color='tab:blue')
-        ax.scatter(centers[:, 0], centers[:, 1], alpha=0.4, color='tab:red')
-        for center, radius in zip(centers, radiuses):
-            c = patches.Circle(
-                xy=center,
-                radius=radius,
-                ec='tab:red',
-                fill=False,
-                alpha=0.2,
-                color='tab:orange')
-            ax.add_patch(c)
+        ax.scatter(centers[:, 0], centers[:, 1], alpha=0.005, color='tab:red')
+        if circle:
+            for center, radius in zip(centers, radiuses):
+                c = patches.Circle(
+                    xy=center,
+                    radius=radius,
+                    ec='tab:red',
+                    fill=False,
+                    alpha=0.2,
+                    color='tab:orange')
+                ax.add_patch(c)
         ax.set_aspect('equal')
 
 
 def main():
-    start_time = time.time()
-
     color_raw = o3d.io.read_image('images/color/color16087244608437330.png')
     depth_raw = o3d.io.read_image('images/depth/depth16087244608437330.png')
     rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
@@ -121,8 +144,10 @@ def main():
         o3d.camera.PinholeCameraIntrinsic(
             o3d.camera.PinholeCameraIntrinsicParameters.PrimeSenseDefault))
 
+    start_time = time.time()
+
     cylinderDetectior = CylinderDetectior(pcd)
-    cylinderDetectior.test_intersection()
+    # cylinderDetectior.test_intersection()
     centers, radiuses = cylinderDetectior.calc_circle(num=10000)
 
     end_time = time.time()
@@ -142,6 +167,16 @@ def main():
     ax.set_title('result')
     cylinderDetectior.plot_result(ax, centers, radiuses)
     fig.savefig('result.png')
+
+    hist, xedges, yedges = np.histogram2d(
+        centers[:, 0], centers[:, 1], bins=100)
+    hist[hist < np.max(hist) * 0.6] = 0
+
+    plt.clf()
+    plt.imshow(hist.T, origin='lower')
+    plt.grid(False)
+    fig.savefig('heatmap.png')
+    # plt.show()
 
 
 if __name__ == '__main__':
