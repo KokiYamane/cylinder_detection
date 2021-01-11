@@ -77,15 +77,17 @@ class CylinderDetectior():
         count_body = np.count_nonzero(d < radiuses_tile - diff, axis=1)
         return count_edge, count_body
 
-    def get_centers(self, r_max=0.3):
-        r = np.arange(-r_max, r_max, 0.01)
+    def get_centers(self, r_min=0.1, r_max=0.3):
+        rs1 = np.arange(r_min, r_max, 0.01)
+        rs2 = np.arange(-r_max, -r_min, 0.01)
+        rs = np.concatenate([rs1, rs2])
         # normals = np.dot(self.normals, r)
         # print(normals.shape)
         # centers1 = self.points + self.normals
         # centers2 = self.points - self.normals
         centers = []
-        for i in r:
-            new_centers = self.points + i * self.normals
+        for r in rs:
+            new_centers = self.points + r * self.normals
             centers.append(new_centers)
         centers = np.array(centers).reshape(-1, 2)
         return centers
