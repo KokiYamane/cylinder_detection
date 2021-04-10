@@ -1,6 +1,6 @@
 # cylinder_detection
 
-## Resutls
+## Results
 
 ![rgbd](rgbd.png)
 ![result](result.png)
